@@ -8,4 +8,5 @@ license = "MIT"
 repository = "https://github.com/LeetManSup/safe_file"
 
 [dependencies]
-thiserror = "1.0"
+tempfile    = "3.10"
+thiserror   = "1.0"
