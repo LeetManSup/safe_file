@@ -1,32 +1,46 @@
-use std::path::Path;
-use backoff::{ExponentialBackoff, Operation};
+//! Функции‑обёртки, выполняющие операции с повтором по экспоненциальному back‑off.
 
-use crate::{decrypt_file, encrypt_file, error::SafeFileError, verify_file};
+use std::{path::Path, thread::sleep};
 
-/// Перезапуск операций с экспоненциальным бэк‑оффом
-fn retry<O, F>(mut op: F) -> Result<(), SafeFileError>
+use backoff::{backoff::Backoff, ExponentialBackoff};
+use crate::{
+    decrypt_file, encrypt_file, verify_file,
+    error::SafeFileError,
+};
+
+/// Универсальный ретрай — повторяет `op` пока `Backoff` выдаёт задержки
+fn retry_with_backoff<F>(mut op: F) -> Result<(), SafeFileError>
 where
     F: FnMut() -> Result<(), SafeFileError>,
 {
-    let mut backoff = ExponentialBackoff {
-        max_elapsed_time: Some(std::time::Duration::from_secs(30)),
-        ..Default::default()
-    };
+    let mut backoff = ExponentialBackoff::default();
 
-    Operation::new(&mut backoff).retry(|| op())
+    loop {
+        match op() {
+            Ok(v) => return Ok(v),   // успех: выходим
+            Err(e) => {
+                // если Backoff вернул None — лимит исчерпан, отдаём ошибку наружу
+                if let Some(delay) = backoff.next_backoff() {
+                    sleep(delay);
+                } else {
+                    return Err(e);
+                }
+            }
+        }
+    }
 }
 
-/// Безопасное шифрование с повторами
+/// Повторить шифрование файла до успеха или исчерпания back‑off.
 pub fn encrypt_with_retry(path: &Path) -> Result<(), SafeFileError> {
-    retry(|| encrypt_file(path))
+    retry_with_backoff(|| encrypt_file(path))
 }
 
-/// Безопасная верификация подписи с повторами
+/// Повторить проверку подписи до успеха или исчерпания back‑off.
 pub fn verify_with_retry(path: &Path) -> Result<(), SafeFileError> {
-    retry(|| verify_file(path))
+    retry_with_backoff(|| verify_file(path))
 }
 
-/// Безопасная дешифрация с повторами
+/// Повторить дешифрацию файла до успеха или исчерпания back‑off.
 pub fn decrypt_with_retry(path: &Path) -> Result<(), SafeFileError> {
-    retry(|| decrypt_file(path))
+    retry_with_backoff(|| decrypt_file(path))
 }

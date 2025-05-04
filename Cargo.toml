@@ -7,6 +7,11 @@ description = "Кроссплатформенная библиотека без�
 license = "MIT"
 repository = "https://github.com/LeetManSup/safe_file"
 
+[features]
+default = ["sync"]
+sync    = []                 # классический блокирующий путь
+async   = ["dep:tokio"]      # неблокирующий API поверх Tokio
+
 [dependencies]
 aes-gcm             = "0.10"
 aes                 = "0.8"
@@ -19,3 +24,5 @@ thiserror           = "1.0"
 tracing-subscriber  = { version = "0.3", features = ["env-filter"] }
 tracing             = "0.1"
 zeroize             = "1.7"
+
+tokio               = { version = "1", optional = true, features = ["fs", "rt-multi-thread"] }

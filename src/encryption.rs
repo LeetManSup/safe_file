@@ -1,37 +1,28 @@
 use aes_gcm::{
     aead::{Aead, KeyInit, OsRng, rand_core::RngCore},
-    Aes256Gcm, Nonce, // тип Aes256Gcm = AesGcm<Aes256, U12>
+    Aes256Gcm, Nonce,
 };
 use tracing::info;
 use std::path::Path;
 
-use crate::{
-    config::Config,
-    error::SafeFileError,
-    io,
-    validation,
-};
+use crate::{config::Config, error::SafeFileError, io, validation};
 
-/// Зашифровать файл "на месте": данные читаются, шифруются и перезаписываются
-///
-/// Формат: [12 байт nonce] + [ciphertext]
+/// Шифрует файл «на месте» (формат: nonce + ciphertext).
 pub fn encrypt_file(path: &Path) -> Result<(), SafeFileError> {
     validation::validate_path(path)?;
     let data = io::read_file(path)?;
 
-    let key = &Config::global().encryption_key;
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let cipher = Aes256Gcm::new_from_slice(&Config::global().encryption_key)
         .map_err(|e| SafeFileError::Crypto(e.to_string()))?;
 
     let mut nonce_bytes = [0u8; 12];
     OsRng.fill_bytes(&mut nonce_bytes);
-    let nonce = Nonce::from_slice(&nonce_bytes); // 96-битный (12 байт) nonce
+    let nonce = Nonce::from_slice(&nonce_bytes);
 
     let mut ciphertext = cipher
         .encrypt(nonce, data.as_ref())
         .map_err(|e| SafeFileError::Crypto(e.to_string()))?;
 
-    // prepend nonce
     let mut out = Vec::with_capacity(12 + ciphertext.len());
     out.extend_from_slice(&nonce_bytes);
     out.append(&mut ciphertext);
@@ -41,7 +32,7 @@ pub fn encrypt_file(path: &Path) -> Result<(), SafeFileError> {
     Ok(())
 }
 
-/// Расшифровать файл "на месте": nonce берётся из первых 12 байт
+/// Расшифровывает файл «на месте» (nonce берётся из первых 12 байт).
 pub fn decrypt_file(path: &Path) -> Result<(), SafeFileError> {
     validation::validate_path(path)?;
     let enc = io::read_file(path)?;
@@ -52,8 +43,7 @@ pub fn decrypt_file(path: &Path) -> Result<(), SafeFileError> {
     let (nonce_bytes, ciphertext) = enc.split_at(12);
     let nonce = Nonce::from_slice(nonce_bytes);
 
-    let key = &Config::global().encryption_key;
-    let cipher = Aes256Gcm::new_from_slice(key)
+    let cipher = Aes256Gcm::new_from_slice(&Config::global().encryption_key)
         .map_err(|e| SafeFileError::Crypto(e.to_string()))?;
 
     let plaintext = cipher

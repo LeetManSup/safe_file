@@ -1,9 +1,16 @@
-use std::{fs::File, io::{Read, Write}, path::Path};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
+
+use tempfile::NamedTempFile;
+
 use crate::{error::SafeFileError, validation::validate_path};
 
 const BUFFER_SIZE: usize = 8 * 1024; // 8 КиБ
 
-/// Прочитать файл в буферы фиксированного размера
+/// Прочитать файл в вектор байт (буферами по 8 КиБ)
 pub fn read_file(path: &Path) -> Result<Vec<u8>, SafeFileError> {
     validate_path(path)?;
     let mut file = File::open(path)?;
@@ -19,17 +26,17 @@ pub fn read_file(path: &Path) -> Result<Vec<u8>, SafeFileError> {
     Ok(buf)
 }
 
-/// Записать данные в файл "атомарно" (через временный файл + rename)
+/// Атомарно записать данные в файл (tmp‑файл + rename)
 pub fn write_file(path: &Path, data: &[u8]) -> Result<(), SafeFileError> {
-    use tempfile::NamedTempFile;
-
-    let dir = path
-        .parent()
+    let dir = path.parent()
         .ok_or_else(|| SafeFileError::Validation("некорректный путь".into()))?;
 
     let mut tmp = NamedTempFile::new_in(dir)?;
     tmp.write_all(data)?;
     tmp.flush()?;
-    tmp.persist(path)?;
+
+    // persist возвращает PersistError; конвертируем в std::io::Error
+    tmp.persist(path)
+        .map_err(|e| SafeFileError::Io(e.error))?;
     Ok(())
 }
