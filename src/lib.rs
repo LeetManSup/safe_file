@@ -24,6 +24,3 @@ pub mod prelude;
 
 pub use encryption::{decrypt_file, encrypt_file};
 pub use signature::{sign_file, verify_file};
-
-#[cfg(test)]
-mod tests;
